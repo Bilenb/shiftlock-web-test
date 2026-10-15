@@ -1,199 +1,220 @@
 <!DOCTYPE html>
-<html lang="de">
-<head>
-  <meta charset="utf-8">
-  <title>ShiftLock</title>
-  <style>
-  #status {display:flex;position:fixed;inset:0;align-items:center;justify-content:center;flex-direction:column;background:#0B1020;color:#e7f0ff;z-index:5;font:16px Arial,sans-serif;}
-  #status-progress {width:55%;max-width:270px;}
-  #status-notice {max-width:85vw;line-height:1.5;white-space:pre-wrap;text-align:center;}
-  #status-splash {width:90px;height:90px;object-fit:contain;margin-bottom:18px;}
-  </style>
-<!-- ShiftLock 4.5.1 iPhone Web-Fix: Head Include -->
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<style>
-  html, body {
-    margin: 0; padding: 0; width: 100%; height: 100%;
-    overflow: hidden; overscroll-behavior: none;
-    position: fixed; left: 0; top: 0;
-    -webkit-user-select: none; user-select: none;
-    background: #0B1020;
-  }
-  #canvas {
-    display: block; position: fixed; left: 0; top: 0;
-    width: 100%; height: 100%; max-width: none; max-height: none;
-    touch-action: none !important;
-    -webkit-user-select: none; user-select: none;
-    -webkit-tap-highlight-color: transparent;
-  }
-  #sl-debug {
-    position: fixed; top: 8px; left: 6px; z-index: 9999;
-    background: rgba(0,0,0,.82); color: #b7ffd5;
-    font: 11px/1.45 monospace; pointer-events: none;
-    white-space: pre; padding: 7px; border-radius: 6px;
-  }
-</style>
-<script>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+		<title>ShiftLock</title>
+		<style>
+html, body, #canvas {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+body {
+	color: white;
+	background-color: black;
+	overflow: hidden;
+	touch-action: none;
+}
+
+#canvas {
+	display: block;
+}
+
+#canvas:focus {
+	outline: none;
+}
+
+#status, #status-splash, #status-progress {
+	position: absolute;
+	left: 0;
+	right: 0;
+}
+
+#status, #status-splash {
+	top: 0;
+	bottom: 0;
+}
+
+#status {
+	background-color: #242424;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	visibility: hidden;
+}
+
+#status-splash {
+	max-height: 100%;
+	max-width: 100%;
+	margin: auto;
+}
+
+#status-splash.show-image--false {
+	display: none;
+}
+
+#status-splash.fullsize--true {
+	height: 100%;
+	width: 100%;
+	object-fit: contain;
+}
+
+#status-splash.use-filter--false {
+	image-rendering: pixelated;
+}
+
+#status-progress, #status-notice {
+	display: none;
+}
+
+#status-progress {
+	bottom: 10%;
+	width: 50%;
+	margin: 0 auto;
+}
+
+#status-notice {
+	background-color: #5b3943;
+	border-radius: 0.5rem;
+	border: 1px solid #9b3943;
+	color: #e0e0e0;
+	font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif;
+	line-height: 1.3;
+	margin: 0 2rem;
+	overflow: hidden;
+	padding: 1rem;
+	text-align: center;
+	z-index: 1;
+}
+		</style>
+		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
+<link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
+
+	</head>
+	<body>
+		<canvas id="canvas">
+			Your browser does not support the canvas tag.
+		</canvas>
+
+		<noscript>
+			Your browser does not support JavaScript.
+		</noscript>
+
+		<div id="status">
+			<img id="status-splash" class="show-image--true fullsize--true use-filter--true" src="index.png" alt="">
+			<progress id="status-progress"></progress>
+			<div id="status-notice"></div>
+		</div>
+
+		<script src="index.js"></script>
+		<script>
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":253944,"index.wasm":37902138},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+const GODOT_THREADS_ENABLED = false;
+const engine = new Engine(GODOT_CONFIG);
+
 (function () {
-  'use strict';
-  var c, debug, lastW = 0, lastH = 0, count = 0;
-  var touchCount = 0, lastTouch = '-';
-  var pending = false, ready = false;
-  var debugMode = new URLSearchParams(location.search).has('sl_debug');
-  function size() {
-    var vv = window.visualViewport;
-    return {
-      w: Math.max(1, Math.round(vv ? vv.width : window.innerWidth)),
-      h: Math.max(1, Math.round(vv ? vv.height : window.innerHeight))
-    };
-  }
-  function paintDebug(reason) {
-    if (!debugMode) return;
-    if (!debug) {
-      debug = document.createElement('div');
-      debug.id = 'sl-debug';
-      document.body.appendChild(debug);
-    }
-    var b = c ? c.getBoundingClientRect() : {width:0,height:0,x:0,y:0};
-    var s = size();
-    debug.textContent = 'ShiftLock iPhone-Test 4.5.1\n' +
-      'viewport: '+s.w+' x '+s.h+'\n' +
-      'canvas: '+Math.round(b.width)+' x '+Math.round(b.height)+
-      ' @ '+Math.round(b.x)+','+Math.round(b.y)+'\n' +
-      'window: '+window.innerWidth+' x '+window.innerHeight+'\n' +
-      'touches: '+touchCount+' / '+lastTouch+'\n' +
-      'ready: '+ready+' / resize: '+count+'\n'+
-      'trigger: '+(reason||'-');
-  }
-  function sync(reason, force) {
-    c = document.getElementById('canvas');
-    if (!c) return;
-    var s = size();
-    // Safari measures visualViewport after the browser chrome is settled.
-    // Changing orientation used to be the only trigger for a resize.
-    if (force || s.w !== lastW || s.h !== lastH || c.style.width !== s.w + 'px' || c.style.height !== s.h + 'px') {
-      lastW = s.w; lastH = s.h;
-      c.style.width = s.w + 'px';
-      c.style.height = s.h + 'px';
-      c.style.touchAction = 'none';
-      c.style.position = 'fixed';
-      c.style.top = '0';
-      c.style.left = '0';
-      count++;
-      // Notify Godot of the current CSS canvas size even if the outer
-      // window's resize event happened before engine initialization.
-      window.dispatchEvent(new Event('resize'));
-    }
-    paintDebug(reason);
-  }
-  function schedule(reason, force) {
-    if (pending && !force) return;
-    pending = true;
-    requestAnimationFrame(function () {
-      pending = false;
-      sync(reason, !!force);
-    });
-  }
-  window.ShiftLockMobile = {
-    afterStart: function () {
-      if (ready) return;
-      ready = true;
-      schedule('godot started', true);
-      [250, 800, 1800, 3500].forEach(function(ms) {
-        setTimeout(function() {schedule('after-start '+ms+'ms', true);}, ms);
-      });
-    }
-  };
-  function boot() {
-    c = document.getElementById('canvas');
-    if (!c) return;
-    c.addEventListener('touchstart', function(e) {
-      touchCount++; lastTouch = 'start '+Math.round(e.touches[0]?.clientX || 0)+','+Math.round(e.touches[0]?.clientY || 0);
-      paintDebug('touchstart');
-    }, {passive:false});
-    c.addEventListener('touchmove', function(e) {
-      lastTouch = 'move '+Math.round(e.touches[0]?.clientX || 0)+','+Math.round(e.touches[0]?.clientY || 0);
-      paintDebug('touchmove');
-    }, {passive:false});
-    c.addEventListener('touchend', function(e) {
-      lastTouch = 'end';
-      paintDebug('touchend');
-    }, {passive:false});
-    // Godot's standard exported HTML removes #status when startGame finishes.
-    // Detect it here so future normal exports get a post-start resize too.
-    var status = document.getElementById('status');
-    if (status && status.parentNode) {
-      var observer = new MutationObserver(function () {
-        if (!document.getElementById('status')) {
-          observer.disconnect();
-          window.ShiftLockMobile.afterStart();
-        }
-      });
-      observer.observe(status.parentNode, {childList:true});
-    }
-    schedule('DOMContentLoaded', true);
-    [200, 800, 2500].forEach(function(ms) {
-      setTimeout(function() {schedule('page load '+ms+'ms', true);},ms);
-    });
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot, {once:true});
-  } else { boot(); }
-  window.addEventListener('resize', function() {schedule('window resize');}, {passive:true});
-  window.addEventListener('orientationchange', function(){
-    setTimeout(function(){schedule('orientation',true)},250);
-  }, {passive:true});
-  window.addEventListener('pageshow', function(){schedule('pageshow',true)}, {passive:true});
-  document.addEventListener('visibilitychange', function(){
-    if (!document.hidden) setTimeout(function(){schedule('visible',true)},150);
-  });
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', function(){schedule('visualViewport resize')}, {passive:true});
-  }
-})();
-</script>
-  <link rel="icon" type="image/png" href="index.icon.png">
-  <link rel="apple-touch-icon" href="index.apple-touch-icon.png">
-</head>
-<body>
-  <canvas id="canvas" tabindex="0">Your browser does not support the canvas tag.</canvas>
-  <noscript>JavaScript ist erforderlich, um ShiftLock zu spielen.</noscript>
-  <div id="status">
-    <img id="status-splash" src="index.png" alt="ShiftLock">
-    <div id="status-text">ShiftLock wird geladen …</div>
-    <progress id="status-progress"></progress>
-    <div id="status-notice"></div>
-  </div>
-  <script src="index.js"></script>
-  <script>
-  const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":253576,"index.wasm":37902138},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
-  const GODOT_THREADS_ENABLED = false;
-  const engine = new Engine(GODOT_CONFIG);
-  (function() {
-    const panel = document.getElementById('status');
-    const bar = document.getElementById('status-progress');
-    const notice = document.getElementById('status-notice');
-    function fail(err) {
-      const message = err && err.message ? err.message : String(err);
-      console.error('ShiftLock Web error:', err);
-      bar.style.display = 'none';
-      notice.textContent = message;
-      document.getElementById('status-text').textContent = 'Fehler beim Laden';
-    }
-    const missing = Engine.getMissingFeatures({threads:GODOT_THREADS_ENABLED});
-    if(missing.length) {
-      fail('Browser unterstützt benötigte Funktionen nicht: ' + missing.join(', '));
-      return;
-    }
-    engine.startGame({onProgress: function(current,total){
-      if(current>0 && total>0) {bar.max=total;bar.value=current;}
-    }}).then(function() {
-      panel.remove();
-      if(window.ShiftLockMobile) window.ShiftLockMobile.afterStart();
-    }).catch(fail);
-  })();
-  </script>
-</body>
+	const statusOverlay = document.getElementById('status');
+	const statusProgress = document.getElementById('status-progress');
+	const statusNotice = document.getElementById('status-notice');
+
+	let initializing = true;
+	let statusMode = '';
+
+	function setStatusMode(mode) {
+		if (statusMode === mode || !initializing) {
+			return;
+		}
+		if (mode === 'hidden') {
+			statusOverlay.remove();
+			initializing = false;
+			return;
+		}
+		statusOverlay.style.visibility = 'visible';
+		statusProgress.style.display = mode === 'progress' ? 'block' : 'none';
+		statusNotice.style.display = mode === 'notice' ? 'block' : 'none';
+		statusMode = mode;
+	}
+
+	function setStatusNotice(text) {
+		while (statusNotice.lastChild) {
+			statusNotice.removeChild(statusNotice.lastChild);
+		}
+		const lines = text.split('\n');
+		lines.forEach((line) => {
+			statusNotice.appendChild(document.createTextNode(line));
+			statusNotice.appendChild(document.createElement('br'));
+		});
+	}
+
+	function displayFailureNotice(err) {
+		console.error(err);
+		if (err instanceof Error) {
+			setStatusNotice(err.message);
+		} else if (typeof err === 'string') {
+			setStatusNotice(err);
+		} else {
+			setStatusNotice('An unknown error occurred.');
+		}
+		setStatusMode('notice');
+		initializing = false;
+	}
+
+	const missing = Engine.getMissingFeatures({
+		threads: GODOT_THREADS_ENABLED,
+	});
+
+	if (missing.length !== 0) {
+		if (GODOT_CONFIG['serviceWorker'] && GODOT_CONFIG['ensureCrossOriginIsolationHeaders'] && 'serviceWorker' in navigator) {
+			let serviceWorkerRegistrationPromise;
+			try {
+				serviceWorkerRegistrationPromise = navigator.serviceWorker.getRegistration();
+			} catch (err) {
+				serviceWorkerRegistrationPromise = Promise.reject(new Error('Service worker registration failed.'));
+			}
+			// There's a chance that installing the service worker would fix the issue
+			Promise.race([
+				serviceWorkerRegistrationPromise.then((registration) => {
+					if (registration != null) {
+						return Promise.reject(new Error('Service worker already exists.'));
+					}
+					return registration;
+				}).then(() => engine.installServiceWorker()),
+				// For some reason, `getRegistration()` can stall
+				new Promise((resolve) => {
+					setTimeout(() => resolve(), 2000);
+				}),
+			]).then(() => {
+				// Reload if there was no error.
+				window.location.reload();
+			}).catch((err) => {
+				console.error('Error while registering service worker:', err);
+			});
+		} else {
+			// Display the message as usual
+			const missingMsg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
+			displayFailureNotice(missingMsg + missing.join('\n'));
+		}
+	} else {
+		setStatusMode('progress');
+		engine.startGame({
+			'onProgress': function (current, total) {
+				if (current > 0 && total > 0) {
+					statusProgress.value = current;
+					statusProgress.max = total;
+				} else {
+					statusProgress.removeAttribute('value');
+					statusProgress.removeAttribute('max');
+				}
+			},
+		}).then(() => {
+			setStatusMode('hidden');
+		}, displayFailureNotice);
+	}
+}());
+		</script>
+	</body>
 </html>
+
